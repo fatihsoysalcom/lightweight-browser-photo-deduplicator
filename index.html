@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fotoğraf Depolama Paradoksu - Hafif Çözüm</title>
+    <!-- Tailwind CSS for minimalist and modern UI styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col">
+
+    <header class="bg-white border-b border-slate-200 py-6 px-4">
+        <div class="max-w-4xl mx-auto flex flex-col md:flex-row justify-between items-center gap-4">
+            <div>
+                <h1 class="text-2xl font-bold text-slate-900">Fotoğraf Depolama Paradoksu</h1>
+                <p class="text-sm text-slate-500">Hafif ve Yerel Benzer Fotoğraf Ayıklayıcı (aHash Teknolojisi)</p>
+            </div>
+            <span class="bg-emerald-100 text-emerald-800 text-xs font-semibold px-3 py-1 rounded-full">%100 Güvenli & Yerel</span>
+        </div>
+    </header>
+
+    <main class="flex-grow max-w-4xl w-full mx-auto p-4 md:p-6 space-y-6">
+        <!-- Intro Card -->
+        <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+            <h2 class="text-lg font-semibold mb-2">Neden Bu Araç?</h2>
+            <p class="text-slate-600 text-sm leading-relaxed">
+                Bulut depolarına binlerce benzer fotoğraf yükleyip ücret ödemek yerine, bu hafif araç sayesinde 
+                fotoğraflarınızı cihazınızdan dışarı aktarmadan, tarayıcı içinde çalışan <strong>ortalama özetleme (average hashing)</strong> 
+                algoritmasıyla saniyeler içinde gruplayabilir ve gereksiz benzerleri temizleyebilirsiniz.
+            </p>
+        </div>
+
+        <!-- Control Panel -->
+        <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-4">
+            <div class="flex flex-col sm:flex-row gap-4 justify-between items-center">
+                <div>
+                    <label class="block text-sm font-medium text-slate-700">Benzerlik Hassasiyeti (Hamming Mesafesi)</label>
+                    <input type="range" id="threshold" min="0" max="15" value="8" class="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-emerald-600">
+                    <span class="text-xs text-slate-500" id="thresholdVal">Maksimum Fark: 8 bit (Daha düşük = daha benzer)</span>
+                </div>
+                
+                <label class="cursor-pointer bg-emerald-600 hover:bg-emerald-700 text-white font-medium py-2.5 px-5 rounded-lg transition shadow-sm inline-block">
+                    Fotoğrafları Seç
+                    <input type="file" id="fileInput" multiple accept="image/*" class="hidden">
+                </label>
+            </div>
+        </div>
+
+        <!-- Results Area -->
+        <div id="results" class="space-y-6"></div>
+    </main>
+
+    <footer class="bg-slate-100 text-center py-4 text-xs text-slate-500 border-t border-slate-200">
+        Fotoğraf Depolama Paradoksu ve Hafif Çözümler Örnek Uygulaması
+    </footer>
+
+    <script>
+        const fileInput = document.getElementById('fileInput');
+        const thresholdInput = document.getElementById('threshold');
+        const thresholdVal = document.getElementById('thresholdVal');
+        const resultsDiv = document.getElementById('results');
+
+        let imagesData = [];
+
+        thresholdInput.addEventListener('input', (e) => {
+            thresholdVal.textContent = `Maksimum Fark: ${e.target.value} bit (Daha düşük = daha benzer)`;
+            if (imagesData.length > 0) processAndDisplay();
+        });
+
+        fileInput.addEventListener('change', async (e) => {
+            const files = Array.from(e.target.files);
+            imagesData = [];
+            resultsDiv.innerHTML = '<p class="text-center text-slate-500 py-8">Fotoğraflar analiz ediliyor...</p>';
+
+            for (let file of files) {
+                const dataUrl = await readFileAsDataURL(file);
+                const hash = await computeAverageHash(dataUrl);
+                imagesData.push({ name: file.name, size: (file.size / 1024).toFixed(1) + ' KB', src: dataUrl, hash });
+            }
+            processAndDisplay();
+        });
+
+        function readFileAsDataURL(file) {
+            return new Promise((resolve) => {
+                const reader = new FileReader();
+                reader.onload = (e) => resolve(e.target.result);
+                reader.readAsDataURL(file);
+            });
+        }
+
+        // Technical Core: Average Hash (aHash) implementation using HTML5 Canvas
+        function computeAverageHash(src) {
+            return new Promise((resolve) => {
+                const img = new Image();
+                img.onload = () => {
+                    const canvas = document.createElement('canvas');
+                    const ctx = canvas.getContext('2d');
+                    // Step 1: Reduce size to 8x8 pixels to discard high frequencies
+                    canvas.width = 8;
+                    canvas.height = 8;
+                    ctx.drawImage(img, 0, 0, 8, 8);
+                    
+                    const imgData = ctx.getImageData(0, 0, 8, 8).data;
+                    let grayPixels = [];
+                    let sum = 0;
+
+                    // Step 2: Convert to grayscale and calculate average color
+                    for (let i = 0; i < imgData.length; i += 4) {
+                        let gray = Math.floor((imgData[i] + imgData[i+1] + imgData[i+2]) / 3);
+                        grayPixels.push(gray);
+                        sum += gray;
+                    }
+                    let avg = sum / 64;
+
+                    // Step 3: Generate binary hash based on average threshold
+                    let hash = "";
+                    for (let i = 0; i < 64; i++) {
+                        hash += grayPixels[i] >= avg ? "1" : "0";
+                    }
+                    resolve(hash);
+                };
+                img.src = src;
+            });
+        }
+
+        // Hamming Distance calculation to measure similarity
+        function getHammingDistance(h1, h2) {
+            let distance = 0;
+            for (let i = 0; i < 64; i++) {
+                if (h1[i] !== h2[i]) distance++;
+            }
+            return distance;
+        }
+
+        // Group similar images and render them
+        function processAndDisplay() {
+            const threshold = parseInt(thresholdInput.value);
+            const groups = [];
+
+            imagesData.forEach(img => {
+                let addedToGroup = false;
+                for (let group of groups) {
+                    // Compare with the representative (first image) of the group
+                    if (getHammingDistance(img.hash, group[0].hash) <= threshold) {
+                        group.push(img);
+                        addedToGroup = true;
+                        break;
+                    }
+                }
+                if (!addedToGroup) {
+                    groups.push([img]);
+                }
+            });
+
+            renderGroups(groups);
+        }
+
+        function renderGroups(groups) {
+            resultsDiv.innerHTML = '';
+            if (groups.length === 0) return;
+
+            groups.forEach((group, index) => {
+                const isDuplicateGroup = group.length > 1;
+                const groupCard = document.createElement('div');
+                groupCard.className = `p-6 rounded-xl border shadow-sm ${isDuplicateGroup ? 'bg-amber-50/50 border-amber-200' : 'bg-white border-slate-200'}`;
+                
+                let html = `
+                    <div class="flex justify-between items-center mb-4">
+                        <h3 class="font-semibold text-slate-800">Grup #${index + 1} (${group.length} Fotoğraf)</h3>
+                        ${isDuplicateGroup ? '<span class="bg-amber-100 text-amber-800 text-xs px-2.5 py-1 rounded font-medium">Benzerler Tespit Edildi</span>' : '<span class="text-slate-400 text-xs">Benzersiz</span>'}
+                    </div>
+                    <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                `;
+
+                group.forEach((img, imgIdx) => {
+                    html += `
+                        <div class="relative bg-white p-2 rounded-lg border border-slate-200 shadow-xs group">
+                            <img src="${img.src}" class="w-full h-32 object-cover rounded-md mb-2">
+                            <p class="text-xs font-medium truncate text-slate-700" title="${img.name}">${img.name}</p>
+                            <p class="text-[10px] text-slate-400">${img.size}</p>
+                            ${isDuplicateGroup && imgIdx > 0 ? `
+                                <button onclick="removeImage('${img.name}')" class="absolute -top-2 -right-2 bg-rose-500 hover:bg-rose-600 text-white rounded-full p-1 shadow-md transition">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                                </button>
+                            ` : ''}
+                        </div>
+                    `;
+                });
+
+                html += `</div>`;
+                if (isDuplicateGroup) {
+                    html += `
+                        <div class="mt-4 flex justify-end">
+                            <button onclick="keepOnlyFirst('${group[0].name}', ${index})" class="text-xs bg-slate-800 hover:bg-slate-900 text-white font-medium py-1.5 px-3 rounded transition">
+                                Sadece İlkini Tut (Diğerlerini Sil)
+                            </button>
+                        </div>
+                    `;
+                }
+
+                groupCard.innerHTML = html;
+                resultsDiv.appendChild(groupCard);
+            });
+        }
+
+        window.removeImage = function(name) {
+            imagesData = imagesData.filter(img => img.name !== name);
+            processAndDisplay();
+        };
+
+        window.keepOnlyFirst = function(keepName, groupIndex) {
+            // Find all image names in this group except the first one
+            const threshold = parseInt(thresholdInput.value);
+            const groups = [];
+            
+            // Re-calculate groups to find the target group
+            imagesData.forEach(img => {
+                let added = false;
+                for (let group of groups) {
+                    if (getHammingDistance(img.hash, group[0].hash) <= threshold) {
+                        group.push(img);
+                        added = true;
+                        break;
+                    }
+                }
+                if (!added) groups.push([img]);
+            });
+
+            const targetGroup = groups[groupIndex];
+            const namesToRemove = targetGroup.slice(1).map(img => img.name);
+            
+            imagesData = imagesData.filter(img => !namesToRemove.includes(img.name));
+            processAndDisplay();
+        };
+    </script>
+</body>
+</html>
